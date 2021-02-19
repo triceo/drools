@@ -1465,6 +1465,7 @@ public class GroupByTest {
                                         var_$p, var_$key, Person::getAge),
                                 // Bindings
                                 D.pattern(var_$key)
+                                        .expr(k -> ((Integer)k) > 0)
                         ),
                         accFunction(CollectListAccumulateFunction::new, var_$key).as(var_$accresult)
                 ),
@@ -1486,6 +1487,95 @@ public class GroupByTest {
         ksession.insert(new Person("Mark", 42));
         assertThat(ksession.fireAllRules()).isEqualTo(1);
         Assertions.assertThat(results).containsOnly(Collections.singletonList(42));
+    }
+
+    @Test
+    public void testNestedGroupBy2() throws Exception {
+        // DROOLS-6031
+        final Global<List> var_results = D.globalOf(List.class, "defaultpkg", "results");
+
+        final Variable<Object> var_$key = D.declarationOf(Object.class);
+        final Variable<Object> var_$keyOuter = D.declarationOf(Object.class);
+        final Variable<Person> var_$p = D.declarationOf(Person.class);
+        final Variable<Object> var_$accresult = D.declarationOf(Object.class);
+
+        final Rule rule1 = PatternDSL.rule("R1").build(
+                D.groupBy(
+                        and(
+                            D.groupBy(
+                                    // Patterns
+                                    D.pattern(var_$p),
+                                    // Grouping Function
+                                    var_$p, var_$key, Person::getAge),
+                            // Bindings
+                            D.pattern(var_$key)
+                                .expr(k -> ((Integer)k) > 0)
+                        ),
+                        var_$key, var_$keyOuter, k -> ((Integer)k) * 2,
+                        accFunction(CollectListAccumulateFunction::new, var_$keyOuter).as(var_$accresult)
+                ),
+                // Consequence
+                D.on(var_$keyOuter, var_$accresult, var_results)
+                        .execute(($outerKey, $accresult, results) -> {
+                            results.add($accresult);
+                        })
+        );
+
+        final Model model = new ModelImpl().addRule( rule1 ).addGlobal( var_results );
+        final KieSession ksession = KieBaseBuilder.createKieBaseFromModel( model ).newKieSession();
+
+        final List<Object> results = new ArrayList<>();
+        ksession.setGlobal( "results", results );
+
+        ksession.insert( "A" );
+        ksession.insert( "test" );
+        ksession.insert(new Person("Mark", 42));
+        assertThat(ksession.fireAllRules()).isEqualTo(1);
+    }
+
+    @Test
+    public void testNestedGroupBy3() throws Exception {
+        // DROOLS-6031
+        final Global<List> var_results = D.globalOf(List.class, "defaultpkg", "results");
+
+        final Variable<Object> var_$key = D.declarationOf(Object.class);
+        final Variable<Object> var_$keyOuter = D.declarationOf(Object.class);
+        final Variable<Person> var_$p = D.declarationOf(Person.class);
+        final Variable<Object> var_$accresult = D.declarationOf(Object.class);
+
+        final Rule rule1 = PatternDSL.rule("R1").build(
+                D.groupBy(
+                        and(
+                                D.groupBy(
+                                        // Patterns
+                                        D.pattern(var_$p),
+                                        // Grouping Function
+                                        var_$p, var_$key, Person::getName,
+                                        accFunction(CountAccumulateFunction::new).as(var_$accresult)),
+                                // Bindings
+                                D.pattern(var_$accresult)
+                                        .expr(c -> ((Integer)c) > 0)
+                        ),
+                        var_$key, var_$accresult, var_$keyOuter, Pair::create
+                ),
+                // Consequence
+                D.on(var_$keyOuter, var_results)
+                        .execute(($outerKey, results) -> {
+                            results.add($outerKey);
+                        })
+        );
+
+        final Model model = new ModelImpl().addRule( rule1 ).addGlobal( var_results );
+        final KieSession ksession = KieBaseBuilder.createKieBaseFromModel( model ).newKieSession();
+
+        final List<Object> results = new ArrayList<>();
+        ksession.setGlobal( "results", results );
+
+        ksession.insert( "A" );
+        ksession.insert( "test" );
+        ksession.insert(new Person("Mark", 42));
+        assertThat(ksession.fireAllRules()).isEqualTo(1);
+        assertThat(results).containsOnly(Pair.create("Mark", 1));
     }
 
 }
