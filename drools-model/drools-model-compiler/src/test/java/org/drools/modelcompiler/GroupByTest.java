@@ -14,17 +14,6 @@
 
 package org.drools.modelcompiler;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.ToIntFunction;
-
 import org.apache.commons.math3.util.Pair;
 import org.assertj.core.api.Assertions;
 import org.drools.core.WorkingMemory;
@@ -38,13 +27,7 @@ import org.drools.core.reteoo.RuleTerminalNodeLeftTuple;
 import org.drools.core.rule.Declaration;
 import org.drools.core.spi.Accumulator;
 import org.drools.core.spi.Tuple;
-import org.drools.model.DSL;
-import org.drools.model.Global;
-import org.drools.model.Index;
-import org.drools.model.Model;
-import org.drools.model.PatternDSL;
-import org.drools.model.Rule;
-import org.drools.model.Variable;
+import org.drools.model.*;
 import org.drools.model.consequences.ConsequenceBuilder;
 import org.drools.model.functions.Function1;
 import org.drools.model.functions.accumulate.GroupKey;
@@ -65,8 +48,12 @@ import org.kie.api.runtime.rule.Match;
 import org.kie.internal.event.rule.RuleEventListener;
 import org.kie.internal.event.rule.RuleEventManager;
 
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.ToIntFunction;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.drools.model.DSL.from;
+import static org.drools.model.DSL.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
@@ -483,7 +470,7 @@ public class GroupByTest {
         Rule rule1 = D.rule("R1").build(
                 D.groupBy(
                         // Patterns
-                        D.and(
+                        and(
                             D.pattern(var_$p)
                                     .bind(var_$age, person -> person.getAge(), D.reactOn("age"))
                                     .bind(var_$initial, person -> person.getName().substring(0, 1)),
@@ -604,7 +591,7 @@ public class GroupByTest {
 
         D.PatternDef<Integer> pattern = D.pattern(patternVar);
         D.PatternDef<String> exist = D.pattern(existsVar);
-        ViewItem patternAndExists = D.and(
+        ViewItem patternAndExists = and(
                 pattern,
                 D.exists(exist));
 
@@ -646,7 +633,7 @@ public class GroupByTest {
 
         D.PatternDef<Integer> pattern = D.pattern(patternVar);
         D.PatternDef<String> exist = D.pattern(existsVar);
-        ViewItem patternAndExists = D.and( pattern, D.exists(exist) );
+        ViewItem patternAndExists = and( pattern, D.exists(exist) );
 
         ViewItem groupBy = D.groupBy(patternAndExists, patternVar, keyVar, Math::abs,
                 DSL.accFunction(CountAccumulateFunction::new).as(resultVar));
@@ -689,7 +676,7 @@ public class GroupByTest {
         Rule rule1 = D.rule("R1").build(
                 D.groupBy(
                         // Patterns
-                        D.and(
+                        and(
                             D.pattern(var_$p).bind(var_$age, Person::getAge, D.reactOn("age")),
                             D.pattern(var_$s).bind(var_$l, String::length, D.reactOn("length"))
                         ),
@@ -764,7 +751,7 @@ public class GroupByTest {
         // count(Parent::getChild)
         Variable<Child> groupKeyVar = D.declarationOf(Child.class);
         Variable<Long> accumulateResult = D.declarationOf(Long.class);
-        ExprViewItem groupBy = PatternDSL.groupBy(D.and(pattern, D.exists(existsPattern)),
+        ExprViewItem groupBy = PatternDSL.groupBy(and(pattern, D.exists(existsPattern)),
                 patternVar, groupKeyVar, Parent::getChild,
                 DSL.accFunction(CountAccumulateFunction::new).as(accumulateResult));
 
@@ -922,7 +909,7 @@ public class GroupByTest {
 
         Rule rule1 = D.rule("R1").build(
                 D.groupBy(
-                        D.and(p1pattern, p2pattern),
+                        and(p1pattern, p2pattern),
                         var_$p1,
                         var_$p2,
                         var_$key,
@@ -1128,7 +1115,7 @@ public class GroupByTest {
 
         Rule rule1 = D.rule("R1").build(
                 D.groupBy(
-                        D.and(
+                        and(
                                 D.groupBy(
                                         D.pattern(var_$p).bind(var_$age, person -> person.getAge()),
                                         var_$p, var_$key_1, person -> person.getName().substring(0, 3),
@@ -1368,7 +1355,7 @@ public class GroupByTest {
         final Rule rule1 = PatternDSL.rule("R1").build(
                 D.groupBy(
                         // Patterns
-                        D.and(
+                        and(
                                 D.pattern(var_$p),
                                 D.pattern(var_$p2)
                                         .bind(var_$accumulate, var_$p, Pair::create)
@@ -1426,7 +1413,7 @@ public class GroupByTest {
         final Rule rule1 = PatternDSL.rule("R1").build(
                 D.groupBy(
                         // Patterns
-                        D.and(
+                        and(
                                 D.pattern(var_$p),
                                 D.pattern(var_$p2)
                                         .bind(var_$accumulate, var_$p, Pair::create)
@@ -1458,4 +1445,47 @@ public class GroupByTest {
         assertThat(ksession.fireAllRules()).isEqualTo(1);
         Assertions.assertThat(results.size()).isEqualTo(1);
     }
+
+    @Test
+    public void testNestedGroupBy() throws Exception {
+        // DROOLS-6031
+        final Global<List> var_results = D.globalOf(List.class, "defaultpkg", "results");
+
+        final Variable<Object> var_$key = D.declarationOf(Object.class);
+        final Variable<Person> var_$p = D.declarationOf(Person.class);
+        final Variable<Object> var_$accresult = D.declarationOf(Object.class);
+
+        final Rule rule1 = PatternDSL.rule("R1").build(
+                D.accumulate(
+                        and(
+                                D.groupBy(
+                                        // Patterns
+                                        D.pattern(var_$p),
+                                        // Grouping Function
+                                        var_$p, var_$key, Person::getAge),
+                                // Bindings
+                                D.pattern(var_$key)
+                        ),
+                        accFunction(CollectListAccumulateFunction::new, var_$key).as(var_$accresult)
+                ),
+                // Consequence
+                D.on(var_$accresult, var_results)
+                        .execute(($accresult, results) -> {
+                            results.add($accresult);
+                        })
+        );
+
+        final Model model = new ModelImpl().addRule( rule1 ).addGlobal( var_results );
+        final KieSession ksession = KieBaseBuilder.createKieBaseFromModel( model ).newKieSession();
+
+        final List<Object> results = new ArrayList<>();
+        ksession.setGlobal( "results", results );
+
+        ksession.insert( "A" );
+        ksession.insert( "test" );
+        ksession.insert(new Person("Mark", 42));
+        assertThat(ksession.fireAllRules()).isEqualTo(1);
+        Assertions.assertThat(results).containsOnly(Collections.singletonList(42));
+    }
+
 }
