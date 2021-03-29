@@ -16,6 +16,20 @@
 
 package org.drools.modelcompiler;
 
+import org.apache.commons.math3.util.Pair;
+import org.assertj.core.api.Assertions;
+import org.drools.core.base.accumulators.IntegerMaxAccumulateFunction;
+import org.drools.core.spi.Activation;
+import org.drools.model.functions.accumulate.GroupKey;
+import org.drools.modelcompiler.domain.*;
+import org.drools.modelcompiler.oopathdtables.InternationalAddress;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.kie.api.definition.type.FactType;
+import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.rule.AccumulateFunction;
+import org.kie.api.runtime.rule.FactHandle;
+
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
@@ -25,47 +39,14 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
-import org.apache.commons.math3.util.Pair;
-import org.assertj.core.api.Assertions;
-import org.drools.core.base.accumulators.IntegerMaxAccumulateFunction;
-import org.drools.model.functions.accumulate.GroupKey;
-import org.drools.modelcompiler.domain.Adult;
-import org.drools.modelcompiler.domain.Child;
-import org.drools.modelcompiler.domain.Customer;
-import org.drools.modelcompiler.domain.Parent;
-import org.drools.modelcompiler.domain.Person;
-import org.drools.modelcompiler.domain.Result;
-import org.drools.modelcompiler.domain.StockTick;
-import org.drools.modelcompiler.domain.TargetPolicy;
-import org.drools.modelcompiler.oopathdtables.InternationalAddress;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.kie.api.definition.type.FactType;
-import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.rule.AccumulateFunction;
-import org.kie.api.runtime.rule.FactHandle;
-
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class AccumulateTest extends BaseModelTest {
 
@@ -2288,6 +2269,50 @@ public class AccumulateTest extends BaseModelTest {
         ksession.insert(new Person("Matteo", 38));
         ksession.fireAllRules();
     }
+
+    @Test
+    public void testNestedAccumulates() {
+        String str =
+                "import java.util.*;\n" +
+                        "import " + GroupByAcc.class.getCanonicalName() + ";\n" +
+                        "import " + GroupByAcc.Pair.class.getCanonicalName() + ";\n" +
+                        "import " + Person.class.getCanonicalName() + ";\n" +
+                        "import " + Activation.class.getCanonicalName() + ";\n" +
+                        "rule R when\n" +
+                        "  $max: Number() from accumulate(\n" +
+                        "    Set($size: size()) from accumulate(" +
+                        "       $p: Person()," +
+                        "       collectSet()" +
+                        "    ),\n" +
+                        "    max($size)" +
+                        "  )\n" +
+                        "then\n" +
+                        "  Activation activation = (Activation) drools.getMatch(); \n" +
+                        "  activation.getObjectsDeep(); \n" +
+                        "  System.out.println($max); \n" +
+                        "end";
+        KieSession ksession = getKieSession(str);
+
+        ksession.insert(new Person("Mark", 42));
+        ksession.insert(new Person("Edson", 38));
+        FactHandle meFH = ksession.insert(new Person("Mario", 45));
+        ksession.insert(new Person("Maciej", 39));
+        ksession.insert(new Person("Edoardo", 33));
+        FactHandle geoffreyFH = ksession.insert(new Person("Geoffrey", 35));
+        ksession.fireAllRules();
+
+        System.out.println("----");
+
+        ksession.delete( meFH );
+        ksession.fireAllRules();
+
+        System.out.println("----");
+
+        ksession.update(geoffreyFH, new Person("Geoffrey", 40));
+        ksession.insert(new Person("Matteo", 38));
+        ksession.fireAllRules();
+    }
+
 
     @Test
     public void testAccumulateStaticMethodWithPatternBindVar() {
