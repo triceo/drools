@@ -1712,6 +1712,52 @@ public class AccumulateTest extends BaseModelTest {
         }
     }
 
+    public static class GroupByAccPersonSet {
+        private final List<Person> nonUnique  = new ArrayList<>(0);
+
+        public GroupByAccPersonSet() {
+
+        }
+
+        public void action(Person person) {
+            nonUnique.add(person);
+        }
+
+        public void reverse(Person person) {
+            nonUnique.remove(person);
+        }
+
+        public List<Set<Person>> result() {
+            return Collections.singletonList(new HashSet<>(nonUnique));
+        }
+
+    }
+
+    public static class GroupByAccSetSize {
+        private final List<Integer> sizes = new ArrayList<>(0);
+
+        public GroupByAccSetSize() {
+
+        }
+
+        public void action(Set<Person> set) {
+            sizes.add(set.size());
+        }
+
+        public void reverse(Set<Person> set) {
+            sizes.add(set.size());
+        }
+
+        public List<Integer> result() {
+            Integer max = sizes.stream()
+                    .mapToInt(i -> i)
+                    .max()
+                    .orElse(0);
+            return Collections.singletonList(max);
+        }
+
+    }
+
     @Test
     public void testGroupBy2() {
         // DROOLS-4737
@@ -2247,6 +2293,57 @@ public class AccumulateTest extends BaseModelTest {
                         "  $p: GroupByAcc.Pair() from $pairs2\n" +
                         "then\n" +
                         "  System.out.println($p.toString());\n" +
+                        "end";
+        KieSession ksession = getKieSession(str);
+
+        ksession.insert(new Person("Mark", 42));
+        ksession.insert(new Person("Edson", 38));
+        FactHandle meFH = ksession.insert(new Person("Mario", 45));
+        ksession.insert(new Person("Maciej", 39));
+        ksession.insert(new Person("Edoardo", 33));
+        FactHandle geoffreyFH = ksession.insert(new Person("Geoffrey", 35));
+        ksession.fireAllRules();
+
+        System.out.println("----");
+
+        ksession.delete( meFH );
+        ksession.fireAllRules();
+
+        System.out.println("----");
+
+        ksession.update(geoffreyFH, new Person("Geoffrey", 40));
+        ksession.insert(new Person("Matteo", 38));
+        ksession.fireAllRules();
+    }
+
+    @Test
+    public void testAnotherAccumulate() {
+        // DROOLS-5283
+        String str =
+                "import java.util.*;\n" +
+                        "import " + AccumulateTest.GroupByAccPersonSet.class.getCanonicalName() + ";\n" +
+                        "import " + AccumulateTest.GroupByAccSetSize.class.getCanonicalName() + ";\n" +
+                        "import " + Person.class.getCanonicalName() + ";\n" +
+                        "import " + Activation.class.getCanonicalName() + ";\n" +
+                        "rule R when\n" +
+                        "  $sets : List( size > 0 ) from accumulate (\n" +
+                        "            Person($p: this),\n" +
+                        "                init( GroupByAccPersonSet acc = new GroupByAccPersonSet(); ),\n" +
+                        "                action( acc.action( $p ); ),\n" +
+                        "                reverse( acc.reverse( $p ); ),\n" +
+                        "                result( acc.result() )\n" +
+                        "         )\n" +
+                        "  $sizes : List( size > 0 ) from accumulate (\n" +
+                        "            Object($s: this) from $sets,\n" +
+                        "                init( GroupByAccSetSize acc2 = new GroupByAccSetSize(); ),\n" +
+                        "                action( acc2.action( (Set) $s ); ),\n" +
+                        "                reverse( acc2.reverse( (Set) $s ); ),\n" +
+                        "                result( acc2.result() )\n" +
+                        "         )\n" +
+                        "  $i: Integer() from $sizes\n" +
+                        "then\n" +
+                        "  Activation activation = (Activation) drools.getMatch(); \n" +
+                        "  System.out.println(activation.getObjectsDeep());\n" +
                         "end";
         KieSession ksession = getKieSession(str);
 
