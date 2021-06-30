@@ -1608,6 +1608,31 @@ public class AccumulateTest extends BaseModelTest {
     }
 
     @Test
+    public void testCollectAfterAccumulate() {
+        String str = "import " + Person.class.getCanonicalName() + ";\n" +
+                "import " + BigDecimal.class.getCanonicalName() + ";\n" +
+                "import " + ArrayList.class.getCanonicalName() + ";\n" +
+                "dialect \"mvel\"\n" +
+                "rule R when\n" +
+                "  accumulate (\n" +
+                "    Person($age: age),\n" +
+                "    $maxAge: max($age)\n" +
+                "  )\n" +
+                "  $result: ArrayList() from collect (\n" +
+                "    Person(age < $maxAge)\n" +
+                "  )\n" +
+                "then\n" +
+                "  // do nothing\n" +
+                "end";
+        try {
+            getKieSession(str);
+        } catch (Throwable ex) {
+            Assertions.fail("Should not have thrown.", ex);
+        }
+    }
+
+
+    @Test
     public void testSemicolonMissingInInit() {
         String str = "import " + Person.class.getCanonicalName() + ";\n" +
                 "import " + BigDecimal.class.getCanonicalName() + ";\n" +
